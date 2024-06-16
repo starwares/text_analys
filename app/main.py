@@ -1,81 +1,29 @@
 import time
-from typing import Union
 
-from fastapi import FastAPI
-from pydantic import BaseModel
+from app import create_app
 
-from app.model import process, processCollections
-
-app = FastAPI()
+from app.models import InputItemModel, InputItemsModel, OutputItemModel, OutputItemsModel, OutputAverageModel
+from app.text_analysis import process_with_list, process_with_string
 
 
-class Item(BaseModel):
-    message: str
-    filters: list = []
+app = create_app()
 
 
-class ItemsCollection(BaseModel):
-    messages: list
-    filters: list = []
+@app.post("/", response_model=OutputItemModel, description="Получение результата для одного поста")
+def get_item(data: InputItemModel):
+    result: OutputItemModel = process_with_string(text=data.message, filters=data.filters)
+    return result
 
 
-@app.post("/")
-async def root(data: Item):
-    st = time.time()
-    return {
-        **process(data.message, data.filters),
-        "execution": str((time.time() - st) * 1000) + ' ms'
-    }
+@app.post("/collection", response_model=OutputItemsModel, description="Получение результата для коллекции постов")
+def get_collection(data: InputItemsModel):
+    result: OutputItemsModel = process_with_list(data=data.messages)
+    return result
 
 
-@app.post("/collection")
-async def root(data: ItemsCollection):
-    st = time.time()
-
-    results = []
-
-    for message in data.messages:
-        results.append(processCollections(message))
-
-    return {
-        "results": results,
-        "execution": str((time.time() - st) * 1000) + ' ms'
-    }
-
-
-@app.post("/summary")
-async def root(data: ItemsCollection):
-    st = time.time()
-
-    results = []
-
-    for message in data.messages:
-        results.append(processCollections(message))
-
-    output = {
-        "mood": {
-            "neutral": 0,
-            "skip": 0,
-            "positive": 0,
-            "negative": 0,
-            "speech": 0,
-        },
-        "toxicity": {
-            "non-toxic": 0,
-            "insult": 0,
-            "obscenity": 0,
-            "threat": 0,
-            "dangerous": 0,
-        },
-    }
-
-    for result in results:
-        for k, v in result.items():
-            if k in ["mood", "toxicity"]:
-                for k2, v2 in v.items():
-                    output[k][k2] = (output[k][k2] + v2) / 2
-
-    return {
-        **output,
-        "execution": str((time.time() - st) * 1000) + ' ms'
-    }
+@app.post("/summary", response_model=OutputAverageModel, description="Получение усредненного результата для коллекции постов")
+def get_summary(data: InputItemsModel):
+    result: OutputItemsModel = process_with_list(data=data.messages)
+    mood = [item_result.mood for item_result in result.results]
+    toxicity = [item_result.toxicity for item_result in result.results]
+    return OutputAverageModel.calculate_average(mood=mood, toxicity=toxicity, execution=result.execution)
