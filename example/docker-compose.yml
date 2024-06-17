@@ -1,0 +1,17 @@
+version: '3'
+services:
+  balancer:
+    container_name: norma_balancer
+    build:
+      context: .
+      dockerfile: Dockerfile.nginx
+    ports:
+      - "5000:80"
+
+  worker1:
+    container_name: norma_worker2
+    image: norma-sentiment:latest
+
+  worker2:
+    container_name: norma_worker1
+    image: norma-sentiment:latest
