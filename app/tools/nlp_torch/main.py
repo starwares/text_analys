@@ -102,10 +102,12 @@ class NlpToolTorch:
                     Усредненные вероятности токсичности для текста.
                 """
 
-        if len(self.tokenizer.encode(text)) <= max_length:
+        tokens = self.tokenizer.encode(text)
+        if len(tokens) <= max_length:
             return self._process_chunk(text)
         else:
-            chunks = [text[i:i + max_length] for i in range(0, len(text), max_length)]
-            proba = sum([self._process_chunk(chunk) for chunk in chunks]) / len(chunks)
+            chunks = [tokens[i:i + max_length] for i in range(0, len(tokens), max_length)]
+            chunk_texts = [self.tokenizer.decode(chunk, skip_special_tokens=True) for chunk in chunks]
+            proba = sum([self._process_chunk(chunk_text) for chunk_text in chunk_texts]) / len(chunk_texts)
             return proba
 
