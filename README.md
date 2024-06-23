@@ -30,7 +30,7 @@
 2. Запустите контейнер, используя созданный Docker образ (замените `<image_name>` по вашему усмотрению):
    
    ```bash
-   docker run -d --name my-container <image_name>
+   docker run -d -p 8668:8668 --name my-container <image_name>
    
 ### На MacOS или Linux:
 
@@ -39,4 +39,4 @@
 2. Запустите контейнер, используя созданный Docker образ (замените `<image_name>` по вашему усмотрению):
    
    ```bash
-   docker run -d --name my-container <image_name>
+   docker run -d -p 8668:8668 --name my-container <image_name>
