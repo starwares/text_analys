@@ -21,7 +21,7 @@ def log_execution_time(file_path):
 
 @log_execution_time('post_time_log.txt')
 def test_post_item():
-    for i in list(range(1,10000)):
+    for i in list(range(1, 10000)):
         response = client.post("/", json={'message': "wef3egf34g", 'filters': ["ghbdtn"]})
         assert response.status_code == 200
         response_json = response.json()

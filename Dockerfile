@@ -8,6 +8,7 @@ RUN apt-get update
 RUN apt-get install gcc make g++ -y
 RUN pip install --upgrade pip setuptools wheel
 RUN pip install --no-cache-dir --upgrade -r /code/requirements.txt
+RUN pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
 RUN apt-get auto-remove -y linux-libc-dev libaom3 gcc make g++ libheif1 libtiff6 binutils
 
 RUN python -m dostoevsky download fasttext-social-network-model

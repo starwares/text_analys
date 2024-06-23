@@ -15,10 +15,12 @@ class NatashaWordFiltersModel(BaseModel):
 
 class NatashaMeaningfulModel(BaseModel):
     meaningful: bool
+    natasha_model_count_tokens: int
 
 
 class NatashaModel(BaseModel):
     artifacts: NatashaArtifactsModel
     filters: NatashaWordFiltersModel
     meaningful: bool
+    natasha_model_count_tokens: int
 

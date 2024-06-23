@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 from natasha import NewsNERTagger, Doc, NewsEmbedding, Segmenter, NewsMorphTagger, NewsSyntaxParser, MorphVocab, \
     DatesExtractor, AddrExtractor
 from app.tools.nlp_natasha.models import NatashaArtifactsModel, NatashaMeaningfulModel, NatashaWordFiltersModel
+from app.utils import remove_emojis_and_punctuation
 
 
 class NlpToolNatasha:
@@ -30,35 +31,11 @@ class NlpToolNatasha:
     dates_extractor = DatesExtractor(morph_vocab)
     address_extractor = AddrExtractor(morph_vocab)
 
-    def __new__(cls):
-        if not hasattr(cls, 'instance'):
-            cls.instance = super(NlpToolNatasha, cls).__new__(cls)
-        return cls.__instance
+    def __init__(self, text):
 
-    @classmethod
-    def _process_order_first(cls, text) -> Doc:
         """
-        Выполняет обработку текста согласно первому порядку:
-        1. Создает объект Doc для текста.
-        2. Сегментирует текст.
-        3. Морфологический анализ.
+        Инициализирует, и выполняет обработку текста :
 
-        Args:
-            text (str): Текст для обработки.
-
-        Returns:
-            Doc: Объект Doc с выполненными этапами обработки.
-        """
-
-        doc = Doc(text)
-        doc.segment(cls.segmenter)
-        doc.tag_morph(cls.morph_tagger)
-        return doc
-
-    @classmethod
-    def _process_order_second(cls, text) -> Doc:
-        """
-        Выполняет обработку текста согласно второму порядку:
         1. Создает объект Doc для текста.
         2. Сегментирует текст.
         3. Синтаксический анализ.
@@ -71,13 +48,13 @@ class NlpToolNatasha:
         Returns:
             Doc: Объект Doc с выполненными этапами обработки.
         """
+        self.text = text
 
-        doc = Doc(text)
-        doc.segment(cls.segmenter)
-        doc.parse_syntax(cls.syntax_parser)
-        doc.tag_ner(cls.ner_tagger)
-        doc.tag_morph(cls.morph_tagger)
-        return doc
+        self.doc = Doc(self.text)
+        self.doc.segment(NlpToolNatasha.segmenter)
+        self.doc.parse_syntax(NlpToolNatasha.syntax_parser)
+        self.doc.tag_ner(NlpToolNatasha.ner_tagger)
+        self.doc.tag_morph(NlpToolNatasha.morph_tagger)
 
     @staticmethod
     def _extract_phone_numbers(text):
@@ -94,8 +71,7 @@ class NlpToolNatasha:
         urls = re.findall(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', text)
         return urls
 
-    @classmethod
-    def artifacts(cls, text: str) -> NatashaArtifactsModel:
+    def artifacts(self) -> NatashaArtifactsModel:
         """
             Метод для извлечения артефактов из текста, таких как именованные сущности,
             даты, адреса, телефоны, электронные адреса и ссылки.
@@ -107,30 +83,27 @@ class NlpToolNatasha:
                 NatashaArtifactsModel: извлеченные артефакты из текста
             """
 
-        doc = cls._process_order_second(text)
-
         # Параллельная нормализация span'ов
         with ThreadPoolExecutor() as executor:
-            executor.map(lambda span: span.normalize(cls.morph_vocab), doc.spans)
+            executor.map(lambda span: span.normalize(NlpToolNatasha.morph_vocab), self.doc.spans)
 
         # Более эффективная генерация записей с использованием списковых включений
-        result = {record.type: set(record.normal for record in doc.spans if record.type) for record in doc.spans}
+        result = {record.type: set(record.normal for record in self.doc.spans if record.type) for record in self.doc.spans}
 
         # Параллельное извлечение дат и адресов
         with ThreadPoolExecutor() as executor:
-            result["DATES"] = list(executor.map(lambda x: x.fact, cls.dates_extractor(text)))
-            result["ADDR"] = list(executor.map(lambda x: x.fact, cls.address_extractor(text)))
+            result["DATES"] = list(executor.map(lambda x: x.fact, NlpToolNatasha.dates_extractor(self.text)))
+            result["ADDR"] = list(executor.map(lambda x: x.fact, NlpToolNatasha.address_extractor(self.text)))
 
-        result["PHONES"] = cls._extract_phone_numbers(text)
-        result["EMAILS"] = cls._extract_emails(text)
-        result["LINKS"] = cls._extract_urls(text)
+        result["PHONES"] = NlpToolNatasha._extract_phone_numbers(self.text)
+        result["EMAILS"] = NlpToolNatasha._extract_emails(self.text)
+        result["LINKS"] = NlpToolNatasha._extract_urls(self.text)
 
         result = {key: value for key, value in result.items() if value}
 
         return NatashaArtifactsModel(**result)
 
-    @classmethod
-    def word_filters(cls, text: str, filters: list) -> NatashaWordFiltersModel:
+    def word_filters(self, filters: list) -> NatashaWordFiltersModel:
         """
             Метод для фильтрации текста на основе заданных фильтров по леммам.
 
@@ -144,40 +117,45 @@ class NlpToolNatasha:
 
         forbidden_lemmas = []
         for word in filters:
-            doc = cls._process_order_second(word)
+            doc_for_filter = NlpToolNatasha(word).doc
 
-            for token in doc.tokens:
-                token.lemmatize(cls.morph_vocab)
+            for token in doc_for_filter.tokens:
+                token.lemmatize(NlpToolNatasha.morph_vocab)
 
-            forbidden_lemmas.append(doc.tokens[0].lemma)
+            forbidden_lemmas.append(doc_for_filter.tokens[0].lemma)
 
-        doc = cls._process_order_second(text)
-
-        for token in doc.tokens:
-            token.lemmatize(cls.morph_vocab)
+        for token in self.doc.tokens:
+            token.lemmatize(NlpToolNatasha.morph_vocab)
 
         forbidden = []
 
-        for token in doc.tokens:
+        for token in self.doc.tokens:
             if token.lemma in forbidden_lemmas:
                 forbidden.append(token.text)
 
         return NatashaWordFiltersModel(passed=len(forbidden) == 0, tokens=set(forbidden))
 
-    @classmethod
-    def meaningful_text(cls, text: str) -> NatashaMeaningfulModel:
+    def meaningful_text(self) -> NatashaMeaningfulModel:
         """
-            Метод для проверки, содержит ли текст хотя бы одно смысловое слово.
+        Метод для проверки, на смысловое предложение.
 
-            Args:
-                text (str): Текст для проверки.
+        Args:
+            text (str): Текст для проверки.
 
-            Returns:
-                NatashaMeaningfulModel: True, если текст содержит смысловые слова, False в противном случае.
-            """
+        Returns:
+            NatashaMeaningfulModel: True, если текст содержит смысловые слова, False в противном случае.
+        """
 
-        words = text.split()
-        for word in words:
-            if any(cls.morph_vocab.word_is_known(w) for w in word.split()):
-                return NatashaMeaningfulModel(meaningful=True)
-        return NatashaMeaningfulModel(meaningful=False)
+        # Фильтрация известных слов и символов, убираем все дублирующиеся слова
+        known_words = set([token.text for token in self.doc.tokens if NlpToolNatasha.morph_vocab.word_is_known(token.text)])
+
+        # длина текста без знаков пунктуации и эмоджи, убираем все дублирующиеся слова
+        len_text = len(set(remove_emojis_and_punctuation(self.text).split()))
+
+        # Проверка что известных слов не меньше трех, и  количества значимых слов (простая эвристика) больше 70
+        # процентов текста
+        if len(known_words) < 3 or len(known_words) > len_text * 0.7:
+            return NatashaMeaningfulModel(meaningful=False, natasha_model_count_tokens=len(self.doc.tokens))
+
+        return NatashaMeaningfulModel(meaningful=True, natasha_model_count_tokens=len(self.doc.tokens))
+
